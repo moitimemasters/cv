@@ -15,8 +15,10 @@ args = vars(ap.parse_args())
 # define the lower and upper boundaries of the "yellow object"
 # (or "ball") in the HSV color space, then initialize the
 # list of tracked points
-colorLower = (165, 95, 100)
+colorLower = (165, 95, 95)
 colorUpper = (180, 255, 255)
+cL = (105, 95, 95)
+cU = (130, 255, 255)
 pts = deque(maxlen=args["buffer"])
 
 # if a video path was not supplied, grab the reference
@@ -42,7 +44,7 @@ while True:
     # blur it, and convert it to the HSV color space
 
     frame = cv2.flip(frame, 1)
-    frame = cv2.GaussianBlur(frame, (15, 15), 0)
+    #frame = cv2.GaussianBlur(frame, (15, 15), 0)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     # construct a mask for the color "green", then perform
@@ -51,10 +53,15 @@ while True:
     mask = cv2.inRange(hsv, colorLower, colorUpper)
     mask = cv2.erode(mask, None, iterations=2)
     mask = cv2.dilate(mask, None, iterations=2)
-
+    mask1 = cv2.inRange(hsv, cL, cU)
+    mask1 = cv2.erode(mask1, None, iterations=2)
+    mask1 = cv2.dilate(mask1, None, iterations=2)
     # find contours in the mask and initialize the current
     # (x, y) center of the ball
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE)[-2]
+
+    cnts1 = cv2.findContours(mask1.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)[-2]
     center = None
 
@@ -76,6 +83,23 @@ while True:
         box = cv2.boxPoints(rect)
         box = np.int0(box)
         frame = cv2.drawContours(frame, [box], -1, (0, 255, 0), 3)
+    if len(cnts1) > 0:
+        # find the largest contour in the mask, then use
+        # it to compute the minimum enclosing circle and
+        # centroid
+        c1 = max(cnts1, key=cv2.contourArea)
+        rect1 = cv2.minAreaRect(c1)
+        ((x1, y1), radius1) = cv2.minEnclosingCircle(c1)
+        M1 = cv2.moments(c1)
+        center1 = (int(M1["m10"] / M1["m00"]), int(M1["m01"] / M1["m00"]))
+
+        # only proceed if the radius meets a minimum size
+
+            # draw the circle and centroid on the frame,
+            # then update the list of tracked points
+        box1 = cv2.boxPoints(rect1)
+        box1 = np.int0(box1)
+        frame = cv2.drawContours(frame, [box1], -1, (0, 0, 255), 3)
 
     # update the points queue
     pts.appendleft(center)
@@ -90,7 +114,7 @@ while True:
         # otherwise, compute the thickness of the line and
         # draw the connecting lines
         thickness = int(np.sqrt(args["buffer"] / float(i + 1)) * 2.5)
-        cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
+
 
     # show the frame to our screen
     cv2.imshow("Frame", frame)
